@@ -12,8 +12,8 @@ import (
 	"sort"
 	"sync"
 
+
 	multierror "github.com/hashicorp/go-multierror"
-//mbase "github.com/multiformats/go-multibase"
 	
 
 	version "github.com/ipfs/go-ipfs"
@@ -291,6 +291,20 @@ func daemonFunc(req *cmds.Request, re cmds.ResponseEmitter, env cmds.Environment
 	removed, err = bootstrapRemoveAll(repo, cfgb)
 	for _, str := range removed {
 		fmt.Printf("boostrap %s is removed \n", str)
+	}
+
+	//提取出eth0 IP 设置5001开放IP
+	ips, err := Ips()
+	if err != nil {
+		fmt.Println("get ip err")
+	} else {
+		eth0_ip := ips["eth0"]
+		new_addr := "/ip4/" + eth0_ip + "/tcp/5001"
+		cfgb.Addresses.API = make([]string, 0)
+		cfgb.Addresses.API = append(cfgb.Addresses.API, new_addr)
+		if err := repo.SetConfig(cfgb); err != nil {
+			fmt.Println("Set 5001 IP Error!")
+		}
 	}
 
 	// The node will also close the repo but there are many places we could
@@ -840,3 +854,39 @@ func bootstrapRemoveAll(r repo.Repo, cfg *config.Config) ([]string, error) {
 	}
 	return config.BootstrapPeerStrings(removed), nil
 }
+
+
+func Ips() (map[string]string, error) {
+	ips := make(map[string]string)
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, iface := range interfaces {
+		byName, err := net.InterfaceByName(iface.Name)
+		addresses, err := byName.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addresses {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip == nil || ip.IsLoopback() {
+				continue
+			}
+			ip = ip.To4()
+			if ip == nil {
+				continue
+			}
+			ips[byName.Name] = ip.String()
+		}
+	}
+	return ips, nil
+}
+
